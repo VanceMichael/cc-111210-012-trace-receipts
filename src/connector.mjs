@@ -1,0 +1,3 @@
+import {get}from './http.mjs';
+export function blocks(bytes){const result=[];let offset=0;while(offset<bytes.length){if(offset+12>bytes.length)throw new Error('抓包块截断');const type=bytes.readUInt32LE(offset);const size=bytes.readUInt32LE(offset+4);if(size<12||size%4||offset+size>bytes.length||bytes.readUInt32LE(offset+size-4)!==size)throw new Error('抓包块长度无效');result.push({type,offset,size,body:bytes.subarray(offset+8,offset+size-4)});offset+=size;}return result;}
+export async function inspect(base){const bytes=Buffer.from(await(await get(base,'/trace.pcapng')).arrayBuffer());const items=blocks(bytes);return {bytes:bytes.length,blocks:items.map(({type,offset,size})=>({type,offset,size})),packets:items.filter(item=>item.type===6).length};}
