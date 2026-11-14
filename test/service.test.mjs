@@ -32,3 +32,39 @@ test('服务健康检查和单次查看走真实来源', async () => {
     assert.equal((await fetch(service.url + '/missing')).status, 404);
   } finally { await service.close(); await fixture.close(); await rm(directory, { recursive: true, force: true }); }
 });
+
+test('提取接口与场景切换走本地来源，非法场景被拒绝', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'extract-'));
+  const fixture = await startFixture();
+  const service = await startService({ source: fixture.url, directory });
+  try {
+    const baseline = await (await fetch(service.url + '/extract')).json();
+    assert.equal(baseline.summary.exchanges, 2);
+    const reuse = await (await fetch(service.url + '/extract?scene=reuse')).json();
+    assert.equal(reuse.summary.connections, 2);
+    const interleaved = await (await fetch(service.url + '/extract?scene=interleaved')).json();
+    assert.equal(interleaved.summary.exchanges, 2);
+    for (const connection of interleaved.connections) {
+      for (const exchange of connection.exchanges) assert.equal(exchange.order.responseAfterRequest, true);
+    }
+    const bogus = await fetch(service.url + '/extract?scene=../etc');
+    assert.equal(bogus.status, 400);
+    const cache = await fetch(service.url + '/extract?cacheBytes=0');
+    assert.equal(cache.status, 400);
+  } finally { await service.close(); await fixture.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+test('接收记录保存关联提取结果并可校验读回', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'extract-receipt-'));
+  const fixture = await startFixture();
+  const service = await startService({ source: fixture.url, directory });
+  try {
+    const saved = await (await fetch(service.url + '/receive?key=linked')).json();
+    assert.equal(saved.value.summary.exchanges, 2);
+    const read = await (await fetch(service.url + '/receipts/linked')).json();
+    assert.equal(read.digest, saved.digest);
+    assert.deepEqual(read.value.ledger, saved.value.ledger);
+    const repeat = await (await fetch(service.url + '/receive?key=linked')).json();
+    assert.equal(repeat.digest, saved.digest);
+  } finally { await service.close(); await fixture.close(); await rm(directory, { recursive: true, force: true }); }
+});

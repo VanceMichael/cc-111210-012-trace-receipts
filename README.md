@@ -17,8 +17,10 @@ npm start
 
 ## 接口与模块
 
-`GET /health` 查看状态，`GET /inspect` 查看来源，`GET /receive?key=sample` 保存单次接收，`GET /receipts/sample` 读取回执。相同key和相同内容可重复接收，不同内容拒绝覆盖。
+`GET /health` 查看状态，`GET /inspect` 查看来源与包块/包头，`GET /extract` 执行请求/回执关联提取，`GET /receive?key=sample` 保存单次接收，`GET /receipts/sample` 读取回执。相同key和相同内容可重复接收，不同内容拒绝覆盖。`/inspect` 与 `/extract` 都支持 `cacheBytes` 调整每连接缓存上限（默认 8 MiB）。
 
-`src/connector.mjs` 解释单次来源响应，`fixtures/source.mjs` 提供可重复启动的本地来源，`src/service.mjs` 组织访问入口，`src/store.mjs` 保存查看结果。`test/connector.test.mjs` 验证协议原语和演练源，`test/service.test.mjs` 验证服务与留存边界。
+`/extract` 的结果包含：`capture`（接口与时间分辨率）、`summary`（完整/截断/缺失计数）、`ledger`（逐条请求的回复情况与包号）、`connections`（每个连接世代的两个方向、字节流终止原因、缺口与冲突证据、配对结果）、`unattachedMessages`（无主或无法配对的请求/响应/中间响应）以及 `fragments`（汇总后的缺口、冲突、未装配片段等）。每条消息都能回到接口、包号、帧内偏移、文件偏移与 TCP 序列号。
 
-生产接入地址与凭据需由部署配置给出；演练客户端拒绝访问回环以外的地址。文档中的接口不向外提供任意目标代理。异常以明确错误响应返回，接收失败不覆盖原回执。
+`src/connector.mjs` 解释单次来源响应并暴露提取入口，`src/pcapng.mjs` 解析 PCAPNG，`src/frame.mjs` 解码以太网/IPv4/TCP，`src/stream.mjs` 按序列号装配与留存缺口/冲突证据，`src/http-message.mjs` 判定 HTTP/1.1 消息边界，`src/messages.mjs` 切分单方向消息，`src/analyze.mjs` 组织连接世代与配对。`fixtures/scenarios.mjs` 提供重传、乱序、缺口、冲突、重用、时间戳交错等本地合成场景。
+
+生产接入地址与凭据需由部署配置给出；演练客户端拒绝访问回环以外的地址。文档中的接口不向外提供任意目标代理。异常以明确错误响应返回，接收失败不覆盖原回执。所有材料均为仓库内本地合成流量，提取过程不访问真实网络。
